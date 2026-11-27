@@ -5,7 +5,58 @@ const destinations = new Set([
   'Mexiko-Stadt', 'Lima', 'Santiago', 'Brasília', 'Buenos Aires', 'Reykjavik'
 ]);
 const home = $('reset').onclick;
-$('showResult').onclick = () => choose(cities[+$('cities').value]);
+let rotationFrame = 0;
+
+function stopRotation() {
+  cancelAnimationFrame(rotationFrame);
+  rotationFrame = 0;
+}
+
+function flyToSelection() {
+  const value = $('cities').value;
+  if (value === '' || game) return;
+  stopRotation();
+  const city = cities[Number(value)];
+  const startLat = lat;
+  const startLon = lon;
+  const deltaLon = wrap(city[3] - startLon);
+  const deltaLat = city[2] - startLat;
+  const distance = Math.hypot(deltaLat, deltaLon * Math.cos((startLat + city[2]) * D / 2));
+  if (distance < 0.1 || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    choose(city);
+    return;
+  }
+
+  // select the new city while keeping the current camera position
+  sel = city;
+  $('info').querySelector('strong').textContent = 'Koordinaten von ' + city[0] + ' · ' + city[1];
+  $('info').lastChild.textContent = fmt(city[2],1,2) + ' / ' + fmt(city[3],0,2);
+  const duration = Math.min(1650, 480 + 8 * distance);
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = t * t * (3 - 2 * t);
+    lat = startLat + deltaLat * eased;
+    lon = startLon + deltaLon * eased;
+    draw();
+    rotationFrame = t < 1 ? requestAnimationFrame(frame) : 0;
+  }
+  rotationFrame = requestAnimationFrame(frame);
+}
+
+$('cities').onchange = flyToSelection;
+$('showResult').onclick = flyToSelection;
+$('search').onkeydown = event => {
+  if (event.key === 'Enter') flyToSelection();
+};
+c.addEventListener('pointerdown', stopRotation);
+c.addEventListener('wheel', stopRotation, {passive:true});
+for (const slider of document.querySelectorAll('input[type=range]')) {
+  slider.addEventListener('input', stopRotation, true);
+}
+for (const button of document.querySelectorAll('.buttons button, #play')) {
+  button.addEventListener('click', stopRotation, true);
+}
 
 function startExpedition() {
   const pool = cities.filter(city => destinations.has(city[0]));
